@@ -1,73 +1,42 @@
-import telebot
 from flask import Flask, request, jsonify
-import threading
-import json
-import os
 
-# ---------------- CONFIG ----------------
-SIGNAL_BOT_TOKEN = "8534924197:AAFq8W69GWlcYGKUAySzzbeEFMYooVNSpZI"
-CHANNEL_USERNAME = "@AustinTradeSignals"
-DB_FILE = "users_db.json"  # Use the same file your admin bot updates
-
-bot = telebot.TeleBot(SIGNAL_BOT_TOKEN)
 app = Flask(__name__)
 
+# ---------------- CONFIG ----------------
+# Only used for signal bot
+SIGNAL_LOG = "signals.json"
+
 # ---------------- DATABASE ----------------
-def load_db():
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-# ---------------- POST SIGNAL TO CHANNEL ----------------
-def post_signal_to_channel(message):
+def load_signals():
     try:
-        bot.send_message(CHANNEL_USERNAME, message)
-        print(f"✅ Signal posted to {CHANNEL_USERNAME}")
-    except Exception as e:
-        print("❌ Failed to post signal:", e)
+        with open(SIGNAL_LOG, "r") as f:
+            return json.load(f)
+    except:
+        return []
 
-# ---------------- SEND TRADE TO CLIENTS ----------------
-def send_trade_to_clients(signal):
-    db = load_db()
-    for device_id, info in db.items():
-        if info.get("activated"):
-            chat_id = info.get("chat_id")
-            try:
-                bot.send_message(chat_id, f"/trade {signal}")
-                print(f"✅ Sent trade to {device_id}")
-            except Exception as e:
-                print(f"❌ Failed to send trade to {device_id}: {e}")
+def save_signals(data):
+    with open(SIGNAL_LOG, "w") as f:
+        json.dump(data, f, indent=4)
 
-# ---------------- TRADINGVIEW WEBHOOK ----------------
+# ---------------- SIGNAL ENDPOINT ----------------
 @app.route("/signal", methods=["POST"])
 def receive_signal():
     data = request.json
-    pair = data.get("pair")
-    side = data.get("side")
-    timeframe = data.get("timeframe")
-    strength = data.get("strength")
 
-    if strength != "strong":
-        return jsonify({"status":"ignored"})
+    # Validate required fields
+    required = ["pair", "direction", "timeframe", "strength"]
+    if not all(field in data for field in required):
+        return jsonify({"status": "error", "message": "Missing fields"}), 400
 
-    # Format the message
-    signal_message = f"📊 New Signal:\nPair: {pair}\nSide: {side}\nTimeframe: {timeframe}\n⚡ Strong Trend"
+    # Save the signal
+    signals = load_signals()
+    signals.append(data)
+    save_signals(signals)
 
-    # Send to Telegram channel
-    post_signal_to_channel(signal_message)
+    print(f"New signal received: {data}")
+    return jsonify({"status": "success", "message": "Signal received"}), 200
 
-    # Send trade command to all active clients
-    send_trade_to_clients(f"{pair} {side} {timeframe}")
-
-    return jsonify({"status":"ok"})
-
-# ---------------- RUN TELEGRAM BOT ----------------
-def run_bot():
-    bot.infinity_polling(skip_pending=True)
-
-threading.Thread(target=run_bot, daemon=True).start()
-
-# ---------------- RUN FLASK SERVER ----------------
+# ---------------- RUN BOT ----------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    print("Signal bot running on port 5001...")
+    app.run(host="0.0.0.0", port=5001)
