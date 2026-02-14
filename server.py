@@ -6,6 +6,7 @@ app = Flask(__name__)
 
 DB_FILE = "licenses.json"
 
+# ---------------- DATABASE ----------------
 def load_db():
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r") as f:
@@ -16,20 +17,35 @@ def save_db(data):
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
+# ---------------- HOME ROUTE ----------------
+@app.route("/")
+def home():
+    return "Austin Maxi Bot License Server Running"
+
+# ---------------- REGISTER DEVICE ----------------
 @app.route("/register", methods=["POST"])
 def register():
-    device_id = request.json.get("device_id")
+    data = request.get_json()
+    device_id = data.get("device_id")
+
+    if not device_id:
+        return jsonify({"status": "error", "message": "device_id missing"})
+
     db = load_db()
 
     if device_id not in db:
         db[device_id] = {"activated": False}
         save_db(db)
+        return jsonify({"status": "registered"})
 
-    return jsonify({"status": "registered"})
+    return jsonify({"status": "already_registered"})
 
+# ---------------- ACTIVATE DEVICE ----------------
 @app.route("/activate", methods=["POST"])
 def activate():
-    device_id = request.json.get("device_id")
+    data = request.get_json()
+    device_id = data.get("device_id")
+
     db = load_db()
 
     if device_id not in db:
@@ -40,7 +56,8 @@ def activate():
 
     return jsonify({"status": "activated"})
 
-@app.route("/check/<device_id>")
+# ---------------- CHECK LICENSE ----------------
+@app.route("/check/<device_id>", methods=["GET"])
 def check(device_id):
     db = load_db()
 
@@ -49,5 +66,8 @@ def check(device_id):
 
     return jsonify({"activated": False})
 
+# ---------------- RENDER PORT FIX ----------------
 if __name__ == "__main__":
-    app.run()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
